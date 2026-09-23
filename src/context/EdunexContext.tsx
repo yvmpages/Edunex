@@ -10,6 +10,7 @@ import { useLocalStorage } from '../hooks/useLocalStorage';
 import type {
   AppData,
   Concept,
+  DocBlock,
   FolderNode,
   Section,
   TrashItem,
@@ -38,6 +39,7 @@ type EdunexContextValue = {
   renameNode: (tree: TreeKey, id: string, title: string) => void;
   updateDocContent: (tree: TreeKey, id: string, content: string) => void;
   setDocImages: (tree: TreeKey, id: string, images: FolderNode['images']) => void;
+  setDocBlocks: (tree: TreeKey, id: string, blocks: DocBlock[]) => void;
   deleteNode: (tree: TreeKey, id: string) => void;
   moveNode: (tree: TreeKey, id: string, newParentId: string | null) => void;
   relocateNode: (
@@ -111,7 +113,8 @@ export function EdunexProvider({ children }: { children: ReactNode }) {
         id,
         type: 'doc',
         title: title.trim() || 'Nuevo documento',
-        content: '',
+        content: tree === 'notas' ? '' : undefined,
+        blocks: tree === 'avances' ? [] : undefined,
         parentId,
         updatedAt: nowIso(),
       };
@@ -159,6 +162,20 @@ export function EdunexProvider({ children }: { children: ReactNode }) {
         [tree]: updateNode(prev[tree], id, (n) => ({
           ...n,
           images: images ?? [],
+          updatedAt: nowIso(),
+        })),
+      }));
+    },
+    [setData],
+  );
+
+  const setDocBlocks = useCallback(
+    (tree: TreeKey, id: string, blocks: DocBlock[]) => {
+      setData((prev) => ({
+        ...prev,
+        [tree]: updateNode(prev[tree], id, (n) => ({
+          ...n,
+          blocks,
           updatedAt: nowIso(),
         })),
       }));
@@ -336,6 +353,7 @@ export function EdunexProvider({ children }: { children: ReactNode }) {
       renameNode,
       updateDocContent,
       setDocImages,
+      setDocBlocks,
       deleteNode,
       moveNode,
       relocateNode,
@@ -356,6 +374,7 @@ export function EdunexProvider({ children }: { children: ReactNode }) {
       renameNode,
       updateDocContent,
       setDocImages,
+      setDocBlocks,
       deleteNode,
       moveNode,
       relocateNode,

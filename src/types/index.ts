@@ -6,12 +6,18 @@ export type DocImage = {
   dataUrl: string;
 };
 
+export type DocBlock =
+  | { id: string; type: 'text'; content: string }
+  | { id: string; type: 'code'; content: string; language?: string }
+  | { id: string; type: 'image'; name: string; dataUrl: string };
+
 export type FolderNode = {
   id: string;
   type: 'folder' | 'doc';
   title: string;
   content?: string;
   images?: DocImage[];
+  blocks?: DocBlock[];
   children?: FolderNode[];
   parentId?: string | null;
   updatedAt: string;
@@ -52,6 +58,45 @@ export const EMPTY_APP_DATA: AppData = {
 
 export const STORAGE_KEY = 'edunex-data';
 
+function migrateDocToBlocks(node: FolderNode): FolderNode {
+  if (node.type !== 'doc') {
+    if (node.children) {
+      return { ...node, children: node.children.map(migrateDocToBlocks) };
+    }
+    return node;
+  }
+  if (node.blocks != null) {
+    if (node.children) {
+      return { ...node, children: node.children.map(migrateDocToBlocks) };
+    }
+    return node;
+  }
+
+  const blocks: DocBlock[] = [];
+  const text = (node.content ?? '').trim();
+  if (text) {
+    blocks.push({
+      id: crypto.randomUUID(),
+      type: 'text',
+      content: node.content ?? '',
+    });
+  }
+  for (const img of node.images ?? []) {
+    blocks.push({
+      id: img.id || crypto.randomUUID(),
+      type: 'image',
+      name: img.name,
+      dataUrl: img.dataUrl,
+    });
+  }
+
+  return {
+    ...node,
+    blocks,
+    children: node.children?.map(migrateDocToBlocks),
+  };
+}
+
 /** Normalize legacy localStorage payloads (e.g. removed `tabla` section). */
 export function normalizeAppData(raw: unknown): AppData {
   if (!raw || typeof raw !== 'object') return EMPTY_APP_DATA;
@@ -59,9 +104,12 @@ export function normalizeAppData(raw: unknown): AppData {
   const trash = (data.trash ?? []).filter(
     (item) => item.source !== ('tabla' as TrashSource),
   ) as TrashItem[];
+  const avances = Array.isArray(data.avances)
+    ? data.avances.map(migrateDocToBlocks)
+    : [];
   return {
     version: 1,
-    avances: Array.isArray(data.avances) ? data.avances : [],
+    avances,
     conceptos: Array.isArray(data.conceptos) ? data.conceptos : [],
     notas: Array.isArray(data.notas) ? data.notas : [],
     trash,

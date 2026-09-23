@@ -21,20 +21,6 @@ type QuickNavTreeProps = {
   ) => void;
 };
 
-function collectExpandedDefaults(nodes: FolderNode[]): Set<string> {
-  const ids = new Set<string>();
-  const walk = (list: FolderNode[]) => {
-    for (const node of list) {
-      if (node.type === 'folder' && (node.children?.length ?? 0) > 0) {
-        ids.add(node.id);
-        walk(node.children!);
-      }
-    }
-  };
-  walk(nodes);
-  return ids;
-}
-
 function NavBranch({
   nodes,
   selectedId,
@@ -140,12 +126,7 @@ function NavBranch({
               <button
                 type="button"
                 className="quick-nav-label"
-                onClick={() => {
-                  onSelect(node.id);
-                  if (node.type === 'folder' && hasChildren && !isExpanded) {
-                    onToggle(node.id);
-                  }
-                }}
+                onClick={() => onSelect(node.id)}
               >
                 <span className="icon" aria-hidden>
                   {node.type === 'folder' ? '▣' : '▪'}
@@ -183,9 +164,7 @@ export function QuickNavTree({
   enableDrag = false,
   onRelocate,
 }: QuickNavTreeProps) {
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(() =>
-    collectExpandedDefaults(nodes),
-  );
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<{
     id: string;
@@ -193,25 +172,24 @@ export function QuickNavTree({
   } | null>(null);
   const [rootDrop, setRootDrop] = useState(false);
 
+  // Expand only ancestors of the selected node (not the node itself)
   useEffect(() => {
     if (!selectedId) return;
     setExpandedIds((prev) => {
       const next = new Set(prev);
-      // expand selected folder and its ancestors via path-like walk
-      const path: string[] = [];
+      const ancestors: string[] = [];
       const walk = (list: FolderNode[], trail: string[]): boolean => {
         for (const n of list) {
-          const t = [...trail, n.id];
           if (n.id === selectedId) {
-            path.push(...t);
+            ancestors.push(...trail);
             return true;
           }
-          if (n.children && walk(n.children, t)) return true;
+          if (n.children && walk(n.children, [...trail, n.id])) return true;
         }
         return false;
       };
       walk(nodes, []);
-      for (const id of path) next.add(id);
+      for (const id of ancestors) next.add(id);
       return next;
     });
   }, [selectedId, nodes]);
@@ -242,7 +220,6 @@ export function QuickNavTree({
     if (index < 0) return;
     if (position === 'after') index += 1;
 
-    // If dragging within same parent and from before the target, adjust
     const dragParent = getParentId(nodes, dragId);
     const dragIndex = getSiblingIndex(nodes, dragId);
     if (dragParent === parentId && dragIndex >= 0 && dragIndex < index) {
@@ -255,50 +232,52 @@ export function QuickNavTree({
   return (
     <aside className="quick-nav" aria-label="Explorador">
       <div className="quick-nav-header">Explorador</div>
-      <button
-        type="button"
-        className={[
-          'quick-nav-root',
-          selectedId == null ? 'active' : '',
-          rootDrop ? 'drop-inside' : '',
-        ]
-          .filter(Boolean)
-          .join(' ')}
-        onClick={() => onSelect(null)}
-        onDragOver={(e) => {
-          if (!enableDrag || !dragId) return;
-          e.preventDefault();
-          setRootDrop(true);
-          setDropTarget(null);
-        }}
-        onDragLeave={() => setRootDrop(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          if (!enableDrag || !onRelocate || !dragId) return;
-          onRelocate(dragId, null, nodes.length);
-          setRootDrop(false);
-          setDragId(null);
-        }}
-      >
-        {rootLabel}
-      </button>
-      {nodes.length === 0 ? (
-        <p className="quick-nav-empty">Sin elementos</p>
-      ) : (
-        <NavBranch
-          nodes={nodes}
-          selectedId={selectedId}
-          onSelect={onSelect}
-          expandedIds={expandedIds}
-          onToggle={toggle}
-          enableDrag={enableDrag}
-          dragId={dragId}
-          setDragId={setDragId}
-          dropTarget={dropTarget}
-          setDropTarget={setDropTarget}
-          onDropNode={handleDropOnNode}
-        />
-      )}
+      <div className="quick-nav-scroll">
+        <button
+          type="button"
+          className={[
+            'quick-nav-root',
+            selectedId == null ? 'active' : '',
+            rootDrop ? 'drop-inside' : '',
+          ]
+            .filter(Boolean)
+            .join(' ')}
+          onClick={() => onSelect(null)}
+          onDragOver={(e) => {
+            if (!enableDrag || !dragId) return;
+            e.preventDefault();
+            setRootDrop(true);
+            setDropTarget(null);
+          }}
+          onDragLeave={() => setRootDrop(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            if (!enableDrag || !onRelocate || !dragId) return;
+            onRelocate(dragId, null, nodes.length);
+            setRootDrop(false);
+            setDragId(null);
+          }}
+        >
+          {rootLabel}
+        </button>
+        {nodes.length === 0 ? (
+          <p className="quick-nav-empty">Sin elementos</p>
+        ) : (
+          <NavBranch
+            nodes={nodes}
+            selectedId={selectedId}
+            onSelect={onSelect}
+            expandedIds={expandedIds}
+            onToggle={toggle}
+            enableDrag={enableDrag}
+            dragId={dragId}
+            setDragId={setDragId}
+            dropTarget={dropTarget}
+            setDropTarget={setDropTarget}
+            onDropNode={handleDropOnNode}
+          />
+        )}
+      </div>
       {enableDrag && (
         <p className="quick-nav-hint">Arrastra para reordenar o mover</p>
       )}

@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useEdunex } from '../context/EdunexContext';
 import { QuickNavTree } from '../components/QuickNavTree';
-import { DocImageGrid, ImageLightbox } from '../components/DocImageGrid';
+import { DocBlocksView } from '../components/avances/DocBlocksView';
+import { DocBlocksEditor } from '../components/avances/DocBlocksEditor';
 import { findPath } from '../utils/tree';
-import { readImageFile } from '../utils/images';
-import type { DocImage } from '../types';
+import type { DocBlock } from '../types';
 
 type FormMode = 'doc' | 'folder' | null;
 
@@ -14,8 +14,7 @@ export function AvancesPage() {
     addFolder,
     addDoc,
     renameNode,
-    updateDocContent,
-    setDocImages,
+    setDocBlocks,
     deleteNode,
     relocateNode,
     findInTree,
@@ -28,17 +27,10 @@ export function AvancesPage() {
 
   const [formMode, setFormMode] = useState<FormMode>(null);
   const [formTitle, setFormTitle] = useState('');
-  const [formContent, setFormContent] = useState('');
-  const [formImages, setFormImages] = useState<DocImage[]>([]);
 
   const [editing, setEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState('');
-  const [draftContent, setDraftContent] = useState('');
-  const [draftImages, setDraftImages] = useState<DocImage[]>([]);
-  const [imageError, setImageError] = useState<string | null>(null);
-  const [previewImage, setPreviewImage] = useState<DocImage | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
-  const createFileRef = useRef<HTMLInputElement>(null);
+  const [draftBlocks, setDraftBlocks] = useState<DocBlock[]>([]);
 
   const createParentId =
     selected == null
@@ -58,7 +50,6 @@ export function AvancesPage() {
 
   useEffect(() => {
     setEditing(false);
-    setImageError(null);
   }, [selectedId]);
 
   useEffect(() => {
@@ -72,53 +63,25 @@ export function AvancesPage() {
 
   const openCreate = (mode: 'doc' | 'folder') => {
     setFormTitle('');
-    setFormContent('');
-    setFormImages([]);
-    setImageError(null);
     setFormMode(mode);
   };
 
-  const startEdit = () => {
+  const startEditDoc = () => {
     if (!selected || selected.type !== 'doc') return;
     setDraftTitle(selected.title);
-    setDraftContent(selected.content ?? '');
-    setDraftImages([...(selected.images ?? [])]);
-    setImageError(null);
+    setDraftBlocks([...(selected.blocks ?? [])]);
     setEditing(true);
   };
 
   const cancelEdit = () => {
     setEditing(false);
-    setImageError(null);
   };
 
-  const saveEdit = () => {
+  const saveEditDoc = () => {
     if (!selected || selected.type !== 'doc') return;
     renameNode('avances', selected.id, draftTitle.trim() || selected.title);
-    updateDocContent('avances', selected.id, draftContent);
-    setDocImages('avances', selected.id, draftImages);
+    setDocBlocks('avances', selected.id, draftBlocks);
     setEditing(false);
-  };
-
-  const addImagesFromFiles = async (
-    files: FileList | null,
-    target: 'draft' | 'form',
-  ) => {
-    if (!files || files.length === 0) return;
-    setImageError(null);
-    try {
-      const loaded: DocImage[] = [];
-      for (const file of Array.from(files)) {
-        loaded.push(await readImageFile(file));
-      }
-      if (target === 'draft') {
-        setDraftImages((prev) => [...prev, ...loaded]);
-      } else {
-        setFormImages((prev) => [...prev, ...loaded]);
-      }
-    } catch (err) {
-      setImageError(err instanceof Error ? err.message : 'Error al cargar imagen');
-    }
   };
 
   const onSubmitCreate = (e: FormEvent) => {
@@ -136,8 +99,6 @@ export function AvancesPage() {
         createParentId,
         formTitle.trim() || 'Nuevo documento',
       );
-      if (formContent.trim()) updateDocContent('avances', id, formContent);
-      if (formImages.length > 0) setDocImages('avances', id, formImages);
       setSelectedId(id);
     }
     setFormMode(null);
@@ -332,7 +293,7 @@ export function AvancesPage() {
                     <button
                       type="button"
                       className="btn btn-sm btn-primary"
-                      onClick={saveEdit}
+                      onClick={saveEditDoc}
                     >
                       Guardar
                     </button>
@@ -348,7 +309,7 @@ export function AvancesPage() {
                   <button
                     type="button"
                     className="btn btn-sm"
-                    onClick={startEdit}
+                    onClick={startEditDoc}
                   >
                     Editar
                   </button>
@@ -367,71 +328,12 @@ export function AvancesPage() {
             </div>
             <div className="content-body">
               {editing ? (
-                <>
-                  <textarea
-                    className="textarea"
-                    value={draftContent}
-                    onChange={(e) => setDraftContent(e.target.value)}
-                    placeholder="Escribe aquí el contenido del documento…"
-                    style={{ minHeight: '12rem' }}
-                  />
-                  <div className="doc-images-edit">
-                    <div className="row" style={{ marginTop: '0.85rem' }}>
-                      <button
-                        type="button"
-                        className="btn btn-sm"
-                        onClick={() => fileRef.current?.click()}
-                      >
-                        Añadir imagen
-                      </button>
-                      <span className="doc-images-optional">Opcional</span>
-                      <input
-                        ref={fileRef}
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        hidden
-                        onChange={(e) => {
-                          void addImagesFromFiles(e.target.files, 'draft');
-                          e.target.value = '';
-                        }}
-                      />
-                    </div>
-                    {imageError && (
-                      <p className="doc-image-error">{imageError}</p>
-                    )}
-                    {draftImages.length > 0 && (
-                      <DocImageGrid
-                        images={draftImages}
-                        editable
-                        onRemove={(id) =>
-                          setDraftImages((prev) =>
-                            prev.filter((x) => x.id !== id),
-                          )
-                        }
-                        onOpen={setPreviewImage}
-                      />
-                    )}
-                  </div>
-                </>
+                <DocBlocksEditor
+                  blocks={draftBlocks}
+                  onChange={setDraftBlocks}
+                />
               ) : (
-                <>
-                  <div className="doc-readonly-text">
-                    {(selected.content ?? '').trim() ? (
-                      selected.content
-                    ) : (
-                      <em style={{ color: 'var(--ink-muted)' }}>
-                        Sin contenido. Pulsa «Editar» para escribir.
-                      </em>
-                    )}
-                  </div>
-                  {(selected.images?.length ?? 0) > 0 && (
-                    <DocImageGrid
-                      images={selected.images!}
-                      onOpen={setPreviewImage}
-                    />
-                  )}
-                </>
+                <DocBlocksView blocks={selected.blocks ?? []} />
               )}
             </div>
           </div>
@@ -458,7 +360,7 @@ export function AvancesPage() {
                 : 'Nuevo documento'}
             </h3>
             <form onSubmit={onSubmitCreate}>
-              <div className="field" style={{ marginBottom: '0.75rem' }}>
+              <div className="field" style={{ marginBottom: '1rem' }}>
                 <label htmlFor="avances-new-title">
                   {formMode === 'folder' ? 'Nombre' : 'Título'}
                 </label>
@@ -471,57 +373,15 @@ export function AvancesPage() {
                 />
               </div>
               {formMode === 'doc' && (
-                <>
-                  <div className="field" style={{ marginBottom: '0.85rem' }}>
-                    <label htmlFor="avances-new-content">Contenido</label>
-                    <textarea
-                      id="avances-new-content"
-                      className="textarea"
-                      value={formContent}
-                      onChange={(e) => setFormContent(e.target.value)}
-                      style={{ minHeight: '120px' }}
-                    />
-                  </div>
-                  <div className="field" style={{ marginBottom: '1rem' }}>
-                    <label>Imágenes (opcional)</label>
-                    <div className="row">
-                      <button
-                        type="button"
-                        className="btn btn-sm"
-                        onClick={() => createFileRef.current?.click()}
-                      >
-                        Añadir imagen
-                      </button>
-                      <input
-                        ref={createFileRef}
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        hidden
-                        onChange={(e) => {
-                          void addImagesFromFiles(e.target.files, 'form');
-                          e.target.value = '';
-                        }}
-                      />
-                    </div>
-                    {imageError && (
-                      <p className="doc-image-error">{imageError}</p>
-                    )}
-                    {formImages.length > 0 && (
-                      <DocImageGrid
-                        images={formImages}
-                        compact
-                        editable
-                        onRemove={(id) =>
-                          setFormImages((prev) =>
-                            prev.filter((x) => x.id !== id),
-                          )
-                        }
-                        onOpen={setPreviewImage}
-                      />
-                    )}
-                  </div>
-                </>
+                <p
+                  style={{
+                    color: 'var(--ink-muted)',
+                    fontSize: '0.9rem',
+                    marginTop: 0,
+                  }}
+                >
+                  Después podrás añadir texto, código e imágenes con «Editar».
+                </p>
               )}
               <div className="row" style={{ justifyContent: 'flex-end' }}>
                 <button
@@ -539,11 +399,6 @@ export function AvancesPage() {
           </div>
         </div>
       )}
-
-      <ImageLightbox
-        image={previewImage}
-        onClose={() => setPreviewImage(null)}
-      />
     </div>
   );
 }
